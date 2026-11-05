@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Famdar.Ai Photo Tag Tool</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#172033;background:#f2f5fa}
+*{box-sizing:border-box}body{margin:0;padding:18px}.app{max-width:1100px;margin:auto}
+header{padding:18px 20px;background:#14243c;color:white;border-radius:16px;margin-bottom:16px}
+h1{font-size:clamp(22px,4vw,30px);margin:0 0 5px}header p{margin:0;color:#d4dfef}
+.layout{display:grid;grid-template-columns:minmax(280px,360px) 1fr;gap:16px}
+.panel{background:white;border:1px solid #e0e6ef;border-radius:15px;padding:16px;box-shadow:0 5px 20px #1720330a}
+label{display:block;font-weight:650;font-size:13px;margin:12px 0 5px}
+input,textarea,select,button{font:inherit;width:100%;border:1px solid #cbd5e1;border-radius:9px;padding:10px;background:white;color:#172033}
+textarea{resize:vertical;min-height:65px}button{cursor:pointer;font-weight:700;background:#1769e0;color:white;border-color:#1769e0;margin-top:10px}
+button.secondary{background:#eef4ff;color:#174a9a;border-color:#d5e4ff}button.dark{background:#172033;border-color:#172033}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:9px}.hint{font-size:12px;color:#64748b;line-height:1.5}
+.preview{min-height:380px;display:flex;align-items:center;justify-content:center;background:#e7ebf2;border-radius:12px;overflow:hidden;position:relative}
+#stage{position:relative;display:inline-block;max-width:100%;line-height:0}#photo{display:block;max-width:100%;max-height:75vh;object-fit:contain}
+#tag{position:absolute;left:12px;bottom:12px;max-width:88%;padding:10px 13px;background:rgba(35,35,35,.67);color:white;font-weight:650;line-height:1.23;white-space:pre-line;text-shadow:0 1px 2px #000;font-size:clamp(10px,1.55vw,15px);overflow-wrap:anywhere}
+.preview-empty{padding:30px;text-align:center;color:#64748b;line-height:1.5}
+#download{background:#0b8b58;border-color:#0b8b58}
+@media(max-width:780px){body{padding:10px}.layout{grid-template-columns:1fr}.preview{min-height:230px}#photo{max-height:60vh}}
+</style>
+</head>
+<body>
+<div class="app">
+<header><h1>Famdar.Ai — Photo Tag Tool</h1><p>Add a camera-style location/date tag to photos manually or with device GPS.</p></header>
+<div class="layout">
+<section class="panel">
+<label for="upload">Select photo</label><input id="upload" type="file" accept="image/*">
+<label>Tag title</label><input id="brand" value="Famdar.Ai">
+<label>Project / place label</label><input id="project" value="FFC Project">
+<div class="row"><div><label>Date</label><input id="date" value="04.11.2026"></div><div><label>Time</label><input id="time" value="20:58"></div></div>
+<label>Coordinates (latitude, longitude)</label><input id="coords" value="29.40766, 71.67383" placeholder="e.g. 29.40766, 71.67383">
+<label>Plus Code / address</label><textarea id="address">CM5F+4GX, Bahawalpur, 63100</textarea>
+<div class="row"><button class="secondary" id="now">Use current date/time</button><button class="secondary" id="gps">Get device GPS</button></div>
+<label>Tag position</label><select id="position"><option value="left">Bottom left</option><option value="right">Bottom right</option></select>
+<label>Tag visibility</label><select id="visibility"><option value="on">Show tag</option><option value="off">Hide tag</option></select>
+<p class="hint">GPS and address retrieval require browser permission and internet. The photo is processed in your browser; it is not uploaded to a server.</p>
+<button id="download">Download tagged photo</button>
+<button class="secondary" id="reset">Reset fields</button>
+</section>
+<section class="panel">
+<div class="preview" id="preview"><div class="preview-empty" id="empty">Choose a photo to preview the tag.<br>It will appear at the lower-left corner.</div><div id="stage" hidden><img id="photo" alt="Photo preview"><div id="tag"></div></div></div>
+<p class="hint">The tag preview updates as you edit the fields. Download exports the image with the tag burned in.</p>
+</section>
+</div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+let sourceImage=null, fileName="tagged-photo.jpg";
+function tagText(){return [$("brand").value,$("project").value,$("date").value+" "+$("time").value,$("coords").value,$("address").value].filter(Boolean).join("\n")}
+function update(){
+ $("tag").textContent=tagText();
+ $("tag").style.display=$("visibility").value==="on"?"block":"none";
+ $("tag").style.left=$("position").value==="left"?"12px":"auto";
+ $("tag").style.right=$("position").value==="right"?"12px":"auto";
+}
+["brand","project","date","time","coords","address","position","visibility"].forEach(id=>$(id).addEventListener("input",update));
+$("upload").addEventListener("change",e=>{
+ const f=e.target.files[0];if(!f)return;fileName=(f.name.replace(/\.[^.]+$/,"")||"photo")+"-tagged.jpg";
+ const url=URL.createObjectURL(f);sourceImage=new Image();sourceImage.onload=()=>{$("photo").src=url;$("stage").hidden=false;$("empty").hidden=true;update()};sourceImage.src=url;
+});
+$("now").onclick=()=>{const d=new Date();$("date").value=[String(d.getDate()).padStart(2,"0"),String(d.getMonth()+1).padStart(2,"0"),d.getFullYear()].join(".");$("time").value=[String(d.getHours()).padStart(2,"0"),String(d.getMinutes()).padStart(2,"0")].join(":");update()};
+$("gps").onclick=()=>{
+ if(!navigator.geolocation){alert("Geolocation is not supported in this browser.");return}
+ $("gps").textContent="Locating…";
+ navigator.geolocation.getCurrentPosition(async p=>{
+ const lat=p.coords.latitude,lon=p.coords.longitude;$("coords").value=lat.toFixed(5)+", "+lon.toFixed(5);
+ try{const r=await fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat="+lat+"&lon="+lon);const j=await r.json();$("address").value=j.display_name||$("address").value}catch(e){$("address").value="GPS location captured"}
+ $("gps").textContent="Get device GPS";update();
+ },e=>{alert("Could not get GPS: "+e.message);$("gps").textContent="Get device GPS"},{enableHighAccuracy:true,timeout:15000});
+};
+$("download").onclick=()=>{
+ if(!sourceImage){alert("Please select a photo first.");return}
+ const w=sourceImage.naturalWidth,h=sourceImage.naturalHeight,canvas=document.createElement("canvas");canvas.width=w;canvas.height=h;const ctx=canvas.getContext("2d");ctx.drawImage(sourceImage,0,0,w,h);
+ if($("visibility").value==="on"){
+ const displayedW=Math.max(1,$("photo").clientWidth),scale=w/displayedW;
+ const pad=Math.max(7,Math.round(7*scale)),font=Math.max(12,Math.round(12*scale)),lineH=Math.round(font*1.22),maxTextW=Math.round(w*.84);
+ ctx.font="650 "+font+"px Arial, sans-serif";
+ const rawLines=tagText().split("\n"),lines=[];
+ rawLines.forEach(line=>{
+   const words=line.split(/\s+/);let current="";
+   words.forEach(word=>{
+     const candidate=current?current+" "+word:word;
+     if(current&&ctx.measureText(candidate).width>maxTextW){lines.push(current);current=word}
+     else current=candidate;
+   });
+   if(current)lines.push(current);
+ });
+ const textW=Math.min(maxTextW,Math.max(...lines.map(t=>ctx.measureText(t).width))),boxW=textW+pad*2,boxH=lines.length*lineH+pad*2;
+ const margin=Math.max(6,Math.round(7*scale)),x=$("position").value==="left"?margin:w-margin-boxW,y=h-margin-boxH;
+ ctx.fillStyle="rgba(35,35,35,.72)";ctx.fillRect(x,y,boxW,boxH);ctx.fillStyle="#fff";ctx.shadowColor="#000";ctx.shadowBlur=2;ctx.shadowOffsetY=1;
+ lines.forEach((t,i)=>ctx.fillText(t,x+pad,y+pad+font*.82+i*lineH));ctx.shadowBlur=0;ctx.shadowOffsetY=0;
+ }
+ canvas.toBlob(blob=>{const a=document.createElement("a"),url=URL.createObjectURL(blob);a.href=url;a.download=fileName;a.click();URL.revokeObjectURL(url)},"image/jpeg",.95);
+};
+$("reset").onclick=()=>{["brand","project","date","time","coords","address"].forEach(id=>$(id).value="");$("position").value="left";$("visibility").value="on";update()};
+update();
+</script>
+</body></html>
