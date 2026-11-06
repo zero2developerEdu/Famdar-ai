@@ -17,8 +17,7 @@ textarea{resize:vertical;min-height:65px}button{cursor:pointer;font-weight:700;b
 button.secondary{background:#eef4ff;color:#174a9a;border-color:#d5e4ff}button.dark{background:#172033;border-color:#172033}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:9px}.hint{font-size:12px;color:#64748b;line-height:1.5}
 .preview{min-height:380px;display:flex;align-items:center;justify-content:center;background:#e7ebf2;border-radius:12px;overflow:hidden;position:relative}
-#stage{position:relative;display:inline-block;max-width:100%;line-height:0}#photo{display:block;max-width:100%;max-height:75vh;object-fit:contain}
-#tag{position:absolute;left:12px;bottom:12px;max-width:88%;padding:10px 13px;background:rgba(35,35,35,.67);color:white;font-weight:650;line-height:1.23;white-space:pre-line;text-shadow:0 1px 2px #000;font-size:clamp(10px,1.55vw,15px);overflow-wrap:anywhere}
+#cv{display:block;max-width:100%;height:auto}
 .preview-empty{padding:30px;text-align:center;color:#64748b;line-height:1.5}
 #download{background:#0b8b58;border-color:#0b8b58}
 @media(max-width:780px){body{padding:10px}.layout{grid-template-columns:1fr}.preview{min-height:230px}#photo{max-height:60vh}}
@@ -32,72 +31,97 @@ button.secondary{background:#eef4ff;color:#174a9a;border-color:#d5e4ff}button.da
 <label for="upload">Select photo</label><input id="upload" type="file" accept="image/*">
 <label>Tag title</label><input id="brand" value="Famdar.Ai">
 <label>Project / place label</label><input id="project" value="FFC Project">
-<div class="row"><div><label>Date</label><input id="date" value="04.11.2026"></div><div><label>Time</label><input id="time" value="20:58"></div></div>
-<label>Coordinates (latitude, longitude)</label><input id="coords" value="29.40766, 71.67383" placeholder="e.g. 29.40766, 71.67383">
+<div class="row"><div><label>Date</label><input id="date" value="06.11.2026"></div><div><label>Time</label><input id="time" value="17:22"></div></div>
+<label>Coordinates (latitude, longitude)</label><input id="coords" value="29.40777, 71.67399" placeholder="e.g. 29.40777, 71.67399">
 <label>Plus Code / address</label><textarea id="address">CM5F+4GX, Bahawalpur, 63100</textarea>
 <div class="row"><button class="secondary" id="now">Use current date/time</button><button class="secondary" id="gps">Get device GPS</button></div>
-<label>Tag position</label><select id="position"><option value="left">Bottom left</option><option value="right">Bottom right</option></select>
+<div class="row"><div><label>Direction (compass)</label><input id="dir" value="NE"></div><div><label>Degrees</label><input id="deg" value="40"></div></div>
+<div class="row"><div><label>Top-right badge name</label><input id="bname" value="Conota"></div><div><label>Badge subtitle</label><input id="bsub" value="Camera for work"></div></div>
+<label>Top-right badge</label><select id="badge"><option value="on">Show</option><option value="off">Hide</option></select>
+<label>Bottom-right compass</label><select id="compass"><option value="on">Show</option><option value="off">Hide</option></select>
+<label>Tag position</label><select id="position"><option value="left">Bottom left</option><option value="right">Bottom right (compass hidden)</option></select>
 <label>Tag visibility</label><select id="visibility"><option value="on">Show tag</option><option value="off">Hide tag</option></select>
 <p class="hint">GPS and address retrieval require browser permission and internet. The photo is processed in your browser; it is not uploaded to a server.</p>
 <button id="download">Download tagged photo</button>
 <button class="secondary" id="reset">Reset fields</button>
 </section>
 <section class="panel">
-<div class="preview" id="preview"><div class="preview-empty" id="empty">Choose a photo to preview the tag.<br>It will appear at the lower-left corner.</div><div id="stage" hidden><img id="photo" alt="Photo preview"><div id="tag"></div></div></div>
+  <div class="preview" id="preview"><div class="preview-empty" id="empty">Choose a photo to preview the tag.<br>Tag bottom-left, badge top-right, compass bottom-right.</div><canvas id="cv" hidden></canvas></div>
 <p class="hint">The tag preview updates as you edit the fields. Download exports the image with the tag burned in.</p>
 </section>
 </div>
 </div>
 <script>
 const $=id=>document.getElementById(id);
+const IDS=["brand","project","date","time","coords","address","dir","deg","bname","bsub","badge","compass","position","visibility"];
+const DEF={brand:"Famdar.Ai",project:"FFC Project",date:"06.11.2026",time:"17:22",coords:"29.40777, 71.67399",address:"CM5F+4GX, Bahawalpur, 63100",dir:"NE",deg:"40",bname:"Conota",bsub:"Camera for work",badge:"on",compass:"on",position:"left",visibility:"on"};
 let sourceImage=null, fileName="tagged-photo.jpg";
-function tagText(){return [$("brand").value,$("project").value,$("date").value+" "+$("time").value,$("coords").value,$("address").value].filter(Boolean).join("\n")}
-function update(){
- $("tag").textContent=tagText();
- $("tag").style.display=$("visibility").value==="on"?"block":"none";
- $("tag").style.left=$("position").value==="left"?"12px":"auto";
- $("tag").style.right=$("position").value==="right"?"12px":"auto";
+const cv=$("cv"),ctx=cv.getContext("2d");
+function tagLines(){return [$("brand").value,$("project").value,$("date").value+" "+$("time").value,$("coords").value,$("address").value].filter(x=>x&&x.trim())}
+function draw(){
+ if(!sourceImage)return;
+ const w=sourceImage.naturalWidth,h=sourceImage.naturalHeight;cv.width=w;cv.height=h;
+ ctx.drawImage(sourceImage,0,0,w,h);
+ const s=Math.min(w,h)/1659, F="Arial, Helvetica, sans-serif";
+ ctx.textBaseline="alphabetic";
+ // ---- main tag (flush to corner, like the camera app)
+ if($("visibility").value==="on"){
+  const font=Math.round(36*s),lineH=Math.round(font*1.28),padX=Math.round(20*s),padY=Math.round(14*s),maxW=Math.round(w*.55);
+  ctx.font="bold "+font+"px "+F;
+  const lines=[];
+  tagLines().forEach(line=>{let cur="";line.split(/\s+/).forEach(wd=>{const c=cur?cur+" "+wd:wd;if(cur&&ctx.measureText(c).width>maxW){lines.push(cur);cur=wd}else cur=c});if(cur)lines.push(cur)});
+  const tw=Math.max(...lines.map(t=>ctx.measureText(t).width)),bw=Math.ceil(tw+padX*2),bh=lines.length*lineH+padY*2;
+  const x=$("position").value==="left"?0:w-bw,y=h-bh;
+  ctx.fillStyle="rgba(45,45,45,.62)";ctx.fillRect(x,y,bw,bh);
+  ctx.fillStyle="#fff";lines.forEach((t,i)=>ctx.fillText(t,x+padX,y+padY+font*.86+i*lineH));
+ }
+ // ---- top-right badge: "Captured with  (logo) Conota / Camera for work"
+ if($("badge").value==="on"){
+  const bw=Math.round(274*s),bh=Math.round(66*s),sl=Math.round(43*s),x0=w-bw;
+  ctx.fillStyle="#fff";ctx.beginPath();ctx.moveTo(x0,0);ctx.lineTo(w,0);ctx.lineTo(w,bh);ctx.lineTo(x0+sl,bh);ctx.closePath();ctx.fill();
+  ctx.fillStyle="#666";ctx.font=Math.round(10*s)+"px "+F;ctx.fillText("Captured with",x0+Math.round(8*s),Math.round(14*s));
+  const cx=x0+Math.round(86*s),cy=Math.round(37*s),r=Math.round(24*s);
+  ctx.fillStyle="#111";ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.fill();
+  ctx.strokeStyle="#f5c400";ctx.lineWidth=Math.max(1,5*s);ctx.beginPath();ctx.arc(cx,cy,r*.62,0,7);ctx.stroke();
+  ctx.fillStyle="#f5c400";ctx.beginPath();ctx.arc(cx,cy,r*.22,0,7);ctx.fill();
+  const tx=x0+Math.round(118*s);
+  ctx.fillStyle="#111";ctx.font="bold "+Math.round(31*s)+"px "+F;ctx.fillText($("bname").value,tx,Math.round(44*s));
+  ctx.fillStyle="#555";ctx.font=Math.round(17*s)+"px "+F;ctx.fillText($("bsub").value,tx,Math.round(62*s));
+ }
+ // ---- bottom-right compass: arrow + direction + degrees
+ if($("compass").value==="on"&&$("position").value==="left"){
+  const cx=w-Math.round(62*s);
+  ctx.shadowColor="rgba(0,0,0,.6)";ctx.shadowBlur=4*s;
+  ctx.fillStyle="#fff";ctx.textAlign="center";
+  ctx.font="bold "+Math.round(24*s)+"px "+F;ctx.fillText(($("deg").value||"")+"°",cx,h-Math.round(12*s));
+  ctx.font="bold "+Math.round(54*s)+"px "+F;ctx.fillText($("dir").value,cx,h-Math.round(50*s));
+  const bot=h-Math.round(118*s),top=bot-Math.round(72*s),hw=Math.round(32*s);
+  ctx.strokeStyle="#fff";ctx.lineWidth=Math.max(1,3.5*s);ctx.lineJoin="round";
+  ctx.beginPath();ctx.moveTo(cx,top);ctx.lineTo(cx+hw,bot);ctx.lineTo(cx,bot-Math.round(20*s));ctx.lineTo(cx-hw,bot);ctx.closePath();ctx.stroke();
+  ctx.fillStyle="rgba(255,255,255,.55)";ctx.beginPath();ctx.moveTo(cx,top);ctx.lineTo(cx+hw,bot);ctx.lineTo(cx,bot-Math.round(20*s));ctx.closePath();ctx.fill();
+  ctx.textAlign="left";ctx.shadowBlur=0;ctx.shadowColor="transparent";
+ }
 }
-["brand","project","date","time","coords","address","position","visibility"].forEach(id=>$(id).addEventListener("input",update));
+IDS.forEach(id=>$(id).addEventListener("input",draw));
 $("upload").addEventListener("change",e=>{
  const f=e.target.files[0];if(!f)return;fileName=(f.name.replace(/\.[^.]+$/,"")||"photo")+"-tagged.jpg";
- const url=URL.createObjectURL(f);sourceImage=new Image();sourceImage.onload=()=>{$("photo").src=url;$("stage").hidden=false;$("empty").hidden=true;update()};sourceImage.src=url;
+ const url=URL.createObjectURL(f);sourceImage=new Image();
+ sourceImage.onload=()=>{cv.hidden=false;$("empty").hidden=true;draw()};sourceImage.src=url;
 });
-$("now").onclick=()=>{const d=new Date();$("date").value=[String(d.getDate()).padStart(2,"0"),String(d.getMonth()+1).padStart(2,"0"),d.getFullYear()].join(".");$("time").value=[String(d.getHours()).padStart(2,"0"),String(d.getMinutes()).padStart(2,"0")].join(":");update()};
+$("now").onclick=()=>{const d=new Date();$("date").value=[String(d.getDate()).padStart(2,"0"),String(d.getMonth()+1).padStart(2,"0"),d.getFullYear()].join(".");$("time").value=[String(d.getHours()).padStart(2,"0"),String(d.getMinutes()).padStart(2,"0")].join(":");draw()};
 $("gps").onclick=()=>{
  if(!navigator.geolocation){alert("Geolocation is not supported in this browser.");return}
  $("gps").textContent="Locating…";
  navigator.geolocation.getCurrentPosition(async p=>{
- const lat=p.coords.latitude,lon=p.coords.longitude;$("coords").value=lat.toFixed(5)+", "+lon.toFixed(5);
- try{const r=await fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat="+lat+"&lon="+lon);const j=await r.json();$("address").value=j.display_name||$("address").value}catch(e){$("address").value="GPS location captured"}
- $("gps").textContent="Get device GPS";update();
+  const lat=p.coords.latitude,lon=p.coords.longitude;$("coords").value=lat.toFixed(5)+", "+lon.toFixed(5);
+  try{const r=await fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat="+lat+"&lon="+lon);const j=await r.json();$("address").value=j.display_name||$("address").value}catch(e){$("address").value="GPS location captured"}
+  $("gps").textContent="Get device GPS";draw();
  },e=>{alert("Could not get GPS: "+e.message);$("gps").textContent="Get device GPS"},{enableHighAccuracy:true,timeout:15000});
 };
 $("download").onclick=()=>{
  if(!sourceImage){alert("Please select a photo first.");return}
- const w=sourceImage.naturalWidth,h=sourceImage.naturalHeight,canvas=document.createElement("canvas");canvas.width=w;canvas.height=h;const ctx=canvas.getContext("2d");ctx.drawImage(sourceImage,0,0,w,h);
- if($("visibility").value==="on"){
- const displayedW=Math.max(1,$("photo").clientWidth),scale=w/displayedW;
- const pad=Math.max(7,Math.round(7*scale)),font=Math.max(12,Math.round(12*scale)),lineH=Math.round(font*1.22),maxTextW=Math.round(w*.84);
- ctx.font="650 "+font+"px Arial, sans-serif";
- const rawLines=tagText().split("\n"),lines=[];
- rawLines.forEach(line=>{
-   const words=line.split(/\s+/);let current="";
-   words.forEach(word=>{
-     const candidate=current?current+" "+word:word;
-     if(current&&ctx.measureText(candidate).width>maxTextW){lines.push(current);current=word}
-     else current=candidate;
-   });
-   if(current)lines.push(current);
- });
- const textW=Math.min(maxTextW,Math.max(...lines.map(t=>ctx.measureText(t).width))),boxW=textW+pad*2,boxH=lines.length*lineH+pad*2;
- const margin=Math.max(6,Math.round(7*scale)),x=$("position").value==="left"?margin:w-margin-boxW,y=h-margin-boxH;
- ctx.fillStyle="rgba(35,35,35,.72)";ctx.fillRect(x,y,boxW,boxH);ctx.fillStyle="#fff";ctx.shadowColor="#000";ctx.shadowBlur=2;ctx.shadowOffsetY=1;
- lines.forEach((t,i)=>ctx.fillText(t,x+pad,y+pad+font*.82+i*lineH));ctx.shadowBlur=0;ctx.shadowOffsetY=0;
- }
- canvas.toBlob(blob=>{const a=document.createElement("a"),url=URL.createObjectURL(blob);a.href=url;a.download=fileName;a.click();URL.revokeObjectURL(url)},"image/jpeg",.95);
+ draw();cv.toBlob(blob=>{const a=document.createElement("a"),url=URL.createObjectURL(blob);a.href=url;a.download=fileName;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)},"image/jpeg",.95);
 };
-$("reset").onclick=()=>{["brand","project","date","time","coords","address"].forEach(id=>$(id).value="");$("position").value="left";$("visibility").value="on";update()};
-update();
+$("reset").onclick=()=>{IDS.forEach(id=>$(id).value=DEF[id]);draw()};
 </script>
 </body></html>
